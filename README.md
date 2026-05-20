@@ -371,3 +371,651 @@ git clone https://github.com/tomasrojasm-duoc/tbrm.restaurante.order.git
 git clone https://github.com/tomasrojasm-duoc/tbrm.restaurante.auth.git
 git clone https://github.com/tomasrojasm-duoc/tbrm.restaurante.waiter.git
 git clone https://github.com/tomasrojasm-duoc/tbrm.restaurante.table.git
+
+## Instrucciones para ejecutar el proyecto
+
+### 2. Iniciar Laragon
+
+Antes de ejecutar los microservicios, se debe abrir Laragon e iniciar el servicio de MySQL.
+
+El proyecto fue desarrollado usando MySQL mediante Laragon, por lo que las bases de datos deben estar disponibles localmente.
+
+---
+
+### 3. Crear las bases de datos
+
+Desde HeidiSQL, consola MySQL o el gestor de base de datos utilizado, se deben crear las bases de datos necesarias para cada microservicio:
+
+```sql
+CREATE DATABASE diner_db;
+CREATE DATABASE reservation_db;
+CREATE DATABASE table_db;
+CREATE DATABASE waiter_db;
+CREATE DATABASE menu_db;
+CREATE DATABASE order_db;
+CREATE DATABASE kitchen_db;
+CREATE DATABASE inventory_db;
+CREATE DATABASE notification_db;
+```
+
+El microservicio `auth-service` no requiere base de datos en la versión actual, ya que trabaja con usuarios definidos en memoria.
+
+---
+
+### 4. Abrir cada microservicio en IntelliJ IDEA
+
+Cada repositorio corresponde a un proyecto Spring Boot independiente. Se debe abrir cada microservicio en IntelliJ IDEA y verificar que Maven cargue correctamente las dependencias del archivo `pom.xml`.
+
+También se debe revisar el archivo:
+
+```txt
+src/main/resources/application.properties
+```
+
+para confirmar:
+
+- nombre de la aplicación;
+- puerto del microservicio;
+- nombre de la base de datos;
+- usuario y contraseña de MySQL;
+- configuración de Flyway.
+
+---
+
+### 5. Verificar migraciones Flyway
+
+Cada microservicio con base de datos posee una carpeta de migraciones en:
+
+```txt
+src/main/resources/db/migration
+```
+
+Al iniciar cada microservicio, Flyway ejecutará automáticamente los scripts SQL necesarios para crear las tablas correspondientes.
+
+Si la base de datos está vacía, Flyway creará las tablas y también la tabla `flyway_schema_history`.
+
+---
+
+### 6. Ejecutar los microservicios
+
+Se recomienda ejecutar los microservicios en el siguiente orden:
+
+```txt
+diner-service         → puerto 8081
+table-service         → puerto 8083
+waiter-service        → puerto 8085
+menu-service          → puerto 8086
+order-service         → puerto 8087
+kitchen-service       → puerto 8088
+inventory-service     → puerto 8089
+notification-service  → puerto 8090
+reservation-service   → puerto 8082
+auth-service          → puerto 8084
+```
+
+Este orden permite levantar primero los servicios base que luego son consultados por otros microservicios mediante APIs REST u OpenFeign.
+
+---
+
+### 7. Probar con Postman
+
+Para verificar el funcionamiento del sistema, se recomienda probar primero los microservicios independientes:
+
+```txt
+diner-service
+table-service
+waiter-service
+menu-service
+inventory-service
+notification-service
+```
+
+Luego se deben probar los microservicios que dependen de otros servicios:
+
+```txt
+reservation-service
+order-service
+kitchen-service
+```
+
+Finalmente, se puede probar `auth-service` mediante el endpoint de login.
+
+---
+
+## Ejemplos de pruebas en Postman
+
+### 1. Probar auth-service
+
+El microservicio `auth-service` permite iniciar sesión y generar un token JWT.
+
+**Endpoint:**
+
+```txt
+POST http://localhost:8084/api/v1/auth/login
+```
+
+**Body:**
+
+```json
+{
+  "username": "admin",
+  "password": "admin"
+}
+```
+
+**Respuesta esperada:**
+
+```json
+{
+  "token": "eyJ..."
+}
+```
+
+Si el servicio responde con código `200 OK` y retorna un `token`, significa que la autenticación funciona correctamente.
+
+También se pueden probar otros usuarios configurados en memoria:
+
+```json
+{
+  "username": "waiter",
+  "password": "1234"
+}
+```
+
+```json
+{
+  "username": "diner",
+  "password": "1234"
+}
+```
+
+Si las credenciales son incorrectas, la respuesta esperada es `401 Unauthorized`.
+
+---
+
+### 2. Listar comensales con diner-service
+
+**Endpoint:**
+
+```txt
+GET http://localhost:8081/api/v1/diners
+```
+
+**Respuesta esperada si no existen registros:**
+
+```json
+[]
+```
+
+**Respuesta esperada si existen registros:**
+
+```json
+[
+  {
+    "id": 1,
+    "run": "12345678-9",
+    "name": "Carlos",
+    "lastName": "Muñoz",
+    "phone": "+56912345678",
+    "address": "Av. Siempre Viva 123",
+    "email": "carlos.munoz@email.com",
+    "birthday": "1998-05-20"
+  }
+]
+```
+
+Este endpoint permite verificar qué IDs de comensales existen. Esos IDs pueden ser utilizados posteriormente en `reservation-service` u `order-service`.
+
+---
+
+### 3. Crear un comensal con diner-service
+
+**Endpoint:**
+
+```txt
+POST http://localhost:8081/api/v1/diners
+```
+
+**Body:**
+
+```json
+{
+  "run": "12345678-9",
+  "name": "Carlos",
+  "lastName": "Muñoz",
+  "phone": "+56912345678",
+  "address": "Av. Siempre Viva 123",
+  "email": "carlos.munoz@email.com",
+  "birthday": "1998-05-20"
+}
+```
+
+**Respuesta esperada:**
+
+```json
+{
+  "id": 1,
+  "run": "12345678-9",
+  "name": "Carlos",
+  "lastName": "Muñoz",
+  "phone": "+56912345678",
+  "address": "Av. Siempre Viva 123",
+  "email": "carlos.munoz@email.com",
+  "birthday": "1998-05-20"
+}
+```
+
+El campo `id` es generado automáticamente por la base de datos.
+
+---
+
+### 4. Crear una mesa con table-service
+
+Antes de crear un pedido, debe existir al menos una mesa.
+
+**Endpoint:**
+
+```txt
+POST http://localhost:8083/api/v1/tables
+```
+
+**Body:**
+
+```json
+{
+  "tableNumber": 1,
+  "capacity": 4,
+  "status": "AVAILABLE"
+}
+```
+
+**Respuesta esperada:**
+
+```json
+{
+  "id": 1,
+  "tableNumber": 1,
+  "capacity": 4,
+  "status": "AVAILABLE"
+}
+```
+
+El `id` generado puede ser usado posteriormente como `tableId` en `order-service` o `reservation-service`.
+
+---
+
+### 5. Crear un mesero con waiter-service
+
+Antes de crear un pedido, debe existir al menos un mesero.
+
+**Endpoint:**
+
+```txt
+POST http://localhost:8085/api/v1/waiters
+```
+
+**Body:**
+
+```json
+{
+  "run": "11111111-1",
+  "name": "Matias",
+  "lastName": "Fuentes",
+  "phone": "+56911111111",
+  "email": "matias.fuentes@restaurant.cl",
+  "shift": "MORNING",
+  "status": "ACTIVE"
+}
+```
+
+**Respuesta esperada:**
+
+```json
+{
+  "id": 1,
+  "run": "11111111-1",
+  "name": "Matias",
+  "lastName": "Fuentes",
+  "phone": "+56911111111",
+  "email": "matias.fuentes@restaurant.cl",
+  "shift": "MORNING",
+  "status": "ACTIVE"
+}
+```
+
+El `id` generado puede ser usado como `waiterId` al crear una orden.
+
+---
+
+### 6. Crear un producto del menú con menu-service
+
+Antes de crear un pedido, debe existir al menos un producto del menú disponible.
+
+**Endpoint:**
+
+```txt
+POST http://localhost:8086/api/v1/menu-items
+```
+
+**Body:**
+
+```json
+{
+  "name": "Completo Italiano",
+  "description": "Pan, vienesa, tomate, palta y mayonesa",
+  "category": "MAIN_COURSE",
+  "price": 3500,
+  "status": "AVAILABLE"
+}
+```
+
+**Respuesta esperada:**
+
+```json
+{
+  "id": 1,
+  "name": "Completo Italiano",
+  "description": "Pan, vienesa, tomate, palta y mayonesa",
+  "category": "MAIN_COURSE",
+  "price": 3500,
+  "status": "AVAILABLE"
+}
+```
+
+El `id` generado puede ser usado como `menuItemId` dentro del detalle de un pedido.
+
+---
+
+### 7. Crear un pedido con order-service
+
+El microservicio `order-service` crea pedidos a partir de IDs existentes en otros microservicios.
+
+Antes de ejecutar esta prueba, deben existir previamente:
+
+- un comensal en `diner-service`;
+- una mesa en `table-service`;
+- un mesero en `waiter-service`;
+- un producto disponible en `menu-service`.
+
+**Endpoint:**
+
+```txt
+POST http://localhost:8087/api/v1/orders
+```
+
+**Body:**
+
+```json
+{
+  "dinerId": 1,
+  "tableId": 1,
+  "waiterId": 1,
+  "date": "2026-06-15",
+  "details": [
+    {
+      "menuItemId": 1,
+      "quantity": 1
+    }
+  ]
+}
+```
+
+**Respuesta esperada:**
+
+```json
+{
+  "id": 1,
+  "dinerId": 1,
+  "tableId": 1,
+  "waiterId": 1,
+  "date": "2026-06-15",
+  "status": "CREATED",
+  "total": 3500,
+  "details": [
+    {
+      "id": 1,
+      "menuItemId": 1,
+      "quantity": 1,
+      "unitPrice": 3500,
+      "subtotal": 3500
+    }
+  ]
+}
+```
+
+En este caso, el cliente solo envía el `menuItemId` y la `quantity`. El backend consulta el precio real del producto en `menu-service`, calcula el `unitPrice`, el `subtotal` y el `total`.
+
+Por ejemplo:
+
+```txt
+unitPrice = 3500
+quantity = 1
+subtotal = 3500 * 1
+total = 3500
+```
+
+Si se cambia la cantidad a `2`, el total esperado sería:
+
+```txt
+3500 * 2 = 7000
+```
+
+---
+
+### 8. Crear un ticket de cocina con kitchen-service
+
+El microservicio `kitchen-service` no crea pedidos directamente. Crea tickets de cocina asociados a órdenes ya existentes.
+
+Antes de ejecutar esta prueba, debe existir una orden creada en `order-service`.
+
+**Endpoint:**
+
+```txt
+POST http://localhost:8088/api/v1/kitchen-tickets
+```
+
+**Body:**
+
+```json
+{
+  "orderId": 1,
+  "status": "PENDING",
+  "estimatedTime": 20,
+  "observations": "Preparar sin cebolla"
+}
+```
+
+**Respuesta esperada:**
+
+```json
+{
+  "id": 1,
+  "orderId": 1,
+  "status": "PENDING",
+  "estimatedTime": 20,
+  "observations": "Preparar sin cebolla"
+}
+```
+
+El campo `orderId` debe corresponder a una orden existente en `order-service`.
+
+Si se intenta crear un ticket con un `orderId` inexistente, el sistema puede responder con error `400 Bad Request`.
+
+---
+
+### 9. Actualizar estado de cocina
+
+**Endpoint:**
+
+```txt
+PATCH http://localhost:8088/api/v1/kitchen-tickets/1/status/READY
+```
+
+**Respuesta esperada:**
+
+```json
+{
+  "id": 1,
+  "orderId": 1,
+  "status": "READY",
+  "estimatedTime": 20,
+  "observations": "Preparar sin cebolla"
+}
+```
+
+Este endpoint actualiza parcialmente el ticket, modificando solo su estado.
+
+---
+
+### 10. Crear inventario con inventory-service
+
+**Endpoint:**
+
+```txt
+POST http://localhost:8089/api/v1/inventory
+```
+
+**Body:**
+
+```json
+{
+  "name": "Tomate",
+  "stock": 10,
+  "minimumStock": 3,
+  "unit": "KG",
+  "status": "AVAILABLE"
+}
+```
+
+**Respuesta esperada:**
+
+```json
+{
+  "id": 1,
+  "name": "Tomate",
+  "stock": 10,
+  "minimumStock": 3,
+  "unit": "KG",
+  "status": "AVAILABLE"
+}
+```
+
+El estado puede calcularse según el stock. Si el stock es menor o igual al stock mínimo, el sistema puede marcarlo como `LOW_STOCK`.
+
+Ejemplo:
+
+```json
+{
+  "name": "Palta",
+  "stock": 2,
+  "minimumStock": 3,
+  "unit": "KG",
+  "status": "AVAILABLE"
+}
+```
+
+Respuesta esperada:
+
+```json
+{
+  "id": 2,
+  "name": "Palta",
+  "stock": 2,
+  "minimumStock": 3,
+  "unit": "KG",
+  "status": "LOW_STOCK"
+}
+```
+
+---
+
+### 11. Crear una notificación con notification-service
+
+**Endpoint:**
+
+```txt
+POST http://localhost:8090/api/v1/notifications
+```
+
+**Body:**
+
+```json
+{
+  "recipient": "kitchen",
+  "type": "ORDER_READY",
+  "message": "La orden 1 está lista para ser entregada",
+  "status": "PENDING",
+  "createdAt": "2026-06-15"
+}
+```
+
+**Respuesta esperada:**
+
+```json
+{
+  "id": 1,
+  "recipient": "kitchen",
+  "type": "ORDER_READY",
+  "message": "La orden 1 está lista para ser entregada",
+  "status": "PENDING",
+  "createdAt": "2026-06-15"
+}
+```
+
+Luego se puede actualizar el estado de la notificación:
+
+```txt
+PATCH http://localhost:8090/api/v1/notifications/1/status/SENT
+```
+
+---
+
+### 12. Importancia de los IDs en las pruebas
+
+Los IDs usados en los ejemplos, como `dinerId`, `tableId`, `waiterId`, `menuItemId` y `orderId`, deben existir previamente en sus microservicios correspondientes.
+
+Por ejemplo, este body de `order-service`:
+
+```json
+{
+  "dinerId": 1,
+  "tableId": 1,
+  "waiterId": 1,
+  "date": "2026-06-15",
+  "details": [
+    {
+      "menuItemId": 1,
+      "quantity": 1
+    }
+  ]
+}
+```
+
+significa:
+
+- `dinerId: 1` debe existir en `diner-service`;
+- `tableId: 1` debe existir en `table-service`;
+- `waiterId: 1` debe existir en `waiter-service`;
+- `menuItemId: 1` debe existir en `menu-service`.
+
+Estos IDs se generan automáticamente cuando se crean registros con `POST`.
+
+Para verificar qué IDs existen, se pueden usar endpoints `GET`, por ejemplo:
+
+```txt
+GET http://localhost:8081/api/v1/diners
+GET http://localhost:8083/api/v1/tables
+GET http://localhost:8085/api/v1/waiters
+GET http://localhost:8086/api/v1/menu-items
+GET http://localhost:8087/api/v1/orders
+```
+
+---
+
+## Consideraciones importantes
+
+Cada microservicio posee su propia base de datos y no accede directamente a tablas de otros microservicios.
+
+Cuando un microservicio necesita validar información externa, utiliza comunicación mediante APIs REST. Por ejemplo, `order-service` valida la existencia de comensales, mesas, meseros y productos del menú consultando a sus respectivos microservicios.
+
+Los IDs como `dinerId`, `tableId`, `waiterId`, `menuItemId` y `orderId` corresponden a registros previamente creados en otros microservicios.
